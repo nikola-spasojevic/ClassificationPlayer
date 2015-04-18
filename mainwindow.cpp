@@ -124,11 +124,20 @@ void MainWindow::on_horizontalSlider_sliderMoved(int position)
 }
 
 void MainWindow::on_ffwdBtn_pressed()
-{
-    emit onFFWpressed();
+{ 
+    const int FFValue = 25;
+    myPlayer->Stop();
+    int j = myPlayer->getCurrentFrame();
+
+    //while(FFW)
+    //{
+        j += FFValue;
+        myPlayer->setCurrentFrame(j);
+    //}
 }
 
 void MainWindow::on_ffwdBtn_released()
 {
-    emit onFFWreleased();
+    myPlayer->Play();
+    //FFW = false;
 }

@@ -34,8 +34,6 @@ class Player : public QThread
 
  public slots:
     void onFeaturesPassed(bool found);
-    void onFFWpressed();
-    void onFFWreleased();
 
  protected:
      void run();

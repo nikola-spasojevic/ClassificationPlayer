@@ -21,8 +21,6 @@ private:
     vector< vector<KeyPoint> > featureVec;
 
 signals:
-    void onFFWpressed();
-    void onFFWreleased();
 
 private slots:
     /**************** FRAME PROCESSING ****************/
@@ -37,9 +35,9 @@ private slots:
     void on_horizontalSlider_sliderPressed();
     void on_horizontalSlider_sliderReleased();
     void on_horizontalSlider_sliderMoved(int position);
-    /**************** PLAYER ****************/
     void on_ffwdBtn_pressed();
     void on_ffwdBtn_released();
+    /**************** PLAYER ****************/
 };
 
 #endif // MAINWINDOW_H

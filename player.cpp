@@ -124,16 +124,18 @@ void Player::onFeaturesPassed(bool found)
     printf("features have been found: %d \n", found);
     featureVectorPerFrame = frameFeatures->getFeatureVectors();
     //if (found)
-        getFeatureHeatMap();
+    getFeatureHeatMap();
 }
 
 void Player::getFeatureHeatMap()
 {
     vector<int> bins(featureVectorPerFrame.size()); //getNumberOfFrames();
+    //Mat drawing = Mat::zeros( bins.size(), CV_8UC3 );
 
     for(unsigned int i = 0; i < featureVectorPerFrame.size(); i++)
     {
         bins.at(i) = featureVectorPerFrame.at(i).size();
+        //drawing.at(i, bins.at(i)) = 1;
         qDebug() << "Size of bin " << i <<  "= " << bins.at(i);
     }
 
