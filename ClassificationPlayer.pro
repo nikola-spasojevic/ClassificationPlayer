@@ -15,11 +15,15 @@ TEMPLATE = app
 SOURCES += main.cpp\
         mainwindow.cpp \
     player.cpp \
-    framefeatures.cpp
+    framefeatures.cpp \
+    mousetracker.cpp
 
 HEADERS  += mainwindow.h \
     player.h \
-    framefeatures.h
+    framefeatures.h \
+    blob.h \
+    mousetracker.h \
+    helperfunctions.h
 
 FORMS    += mainwindow.ui
 

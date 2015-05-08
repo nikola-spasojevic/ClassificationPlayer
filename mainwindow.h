@@ -2,6 +2,9 @@
 #define MAINWINDOW_H
 
 #include <player.h>
+#include <mousetracker.h>
+#include <helperfunctions.h>
+#include <QtGui>
 
 namespace Ui {
 class MainWindow;
@@ -18,7 +21,15 @@ public:
 private:
     Ui::MainWindow *ui;
     Player* myPlayer;
-    vector< vector<KeyPoint> > featureVec;
+    vector< vector<KeyPoint> >  featureVec;
+
+    QPoint prevPoint;
+    QPoint topLeftCorner;
+    QPoint bottomRightCorner;
+    QPixmap px, pxBuffer;
+    Rect roi;
+
+    void processROI(Mat roi);
 
 signals:
 
@@ -38,6 +49,13 @@ private slots:
     void on_ffwdBtn_pressed();
     void on_ffwdBtn_released();
     /**************** PLAYER ****************/
+
+    /**************** MOUSE TRACKER ****************/
+    void Mouse_current_pos();
+    void Mouse_pressed();
+    void Mouse_left();
+    void Mouse_released();
+    /**************** MOUSE TRACKER ****************/
 };
 
 #endif // MAINWINDOW_H

@@ -10,6 +10,7 @@
 #include <QMessageBox>
 #include <QTime>
 #include "framefeatures.h"
+#include "blob.h"
 
 class QLabel;
 
@@ -20,13 +21,12 @@ class Player : public QThread
     QMutex mutex;
     QWaitCondition condition;
     Mat frame;
+    Mat RGBframe;
     Mat processedFrame;
     int frameRate;
     VideoCapture *capture;
-    Mat RGBframe;
     QImage img;
     QImage imgProcessed;
-    unsigned int ID;
 
  signals:
     void originalImage(const QImage &image);
@@ -37,7 +37,6 @@ class Player : public QThread
 
  protected:
      void run();
-     void msleep(int ms);
 
  public:
     Player(QObject *parent = 0);
@@ -46,14 +45,23 @@ class Player : public QThread
     void Play();
     void Stop();
     bool isStopped() const;
+    void msleep(int ms);
     void setCurrentFrame(int frameNumber);
     double getFrameRate();
     double getCurrentFrame();
     double getNumberOfFrames();
     void ProcessFrame();
+    void Tracking();
     void getFeatureHeatMap();
-    vector<vector<KeyPoint> > featureVectorPerFrame;
+    vector<cv::Mat > featureVectorPerFrame;
     FrameFeatures *frameFeatures;
+
+    /**************** Tracking ****************/
+    cv::Mat rawFrame,rawCopyFrame,foregroundFrame, foregroundFrameBuffer, roiFrame, roiFrameBuffer, hsvRoiFrame, roiFrameMask;
+    cv::BackgroundSubtractorMOG2 mog;
+    cv::vector<Blob> blobContainer;
+    unsigned int ID;
+    /**************** Tracking ****************/
 };
 
 #endif // PLAYER_H

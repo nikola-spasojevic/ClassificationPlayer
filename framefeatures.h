@@ -13,8 +13,7 @@
 #include <opencv2/calib3d/calib3d.hpp> // for homography
 #include <opencv2/nonfree/nonfree.hpp>
 #include <opencv2/video/video.hpp>
-//#include <opencv/cv.h>
-//#include <opencv/highgui.h>
+#include <opencv2/ml/ml.hpp>
 
 using namespace std;
 using namespace cv;
@@ -27,9 +26,10 @@ public:
     void run();
     void processFrames();
     void setFilename(string filename);
-    vector<vector<KeyPoint> > getFeatureVectors();
+    vector<cv::Mat > getFeatureVectors();
+    void buildClassifier();
 
-    vector<vector<KeyPoint> > featureVectorPerFrame;
+    vector<cv::Mat > descriptors_sceneVector;
     string filename;
     bool found;
 
