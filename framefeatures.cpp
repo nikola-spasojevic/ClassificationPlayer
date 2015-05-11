@@ -17,11 +17,16 @@ void FrameFeatures::processFrames()
     VideoCapture *capture  =  new cv::VideoCapture(filename);
     int numberOfFrames = capture->get(CV_CAP_PROP_FRAME_COUNT);
     int frameRate = (int) capture->get(CV_CAP_PROP_FPS);
-    int Nth = frameRate;
+    int Nth = frameRate/2;
 
-    const int hes_thresh = 1500; //Set it as a Blob Detector
+    const int hes_thresh = 100;
     SurfFeatureDetector detector(hes_thresh);
-    detector.upright = 1; //orientation is not computed
+    //FastFeatureDetector detector(hes_thresh);
+
+    detector.upright = 0; //orientation is computed
+    detector.extended = 0;
+    detector.nOctaves = 1;
+    detector.nOctaveLayers = 4;
     vector<KeyPoint> keypoints_scene;
     SurfDescriptorExtractor extractor;
     Mat descriptors_scene;
@@ -30,23 +35,26 @@ void FrameFeatures::processFrames()
     Mat frm;
     capture->read(frm); // get a new frame from camera
 
-    while(j < (numberOfFrames-Nth+1) && !frm.empty())
+    while( j < (numberOfFrames-Nth+1) && !frm.empty() )
     {
+        keypoints_scene.clear();
         cvtColor(frm, frm, CV_BGR2GRAY);
-        GaussianBlur(frm, frm, Size(7,7), 1.5, 1.5);
+        //GaussianBlur(frm, frm, Size(9, 9), 1.5, 1.5);
+        //equalizeHist(frm, frm); // Apply Histogram Equalization
 
         //-- Step 1: Detect the keypoints using SURF Detector
         detector.detect(frm, keypoints_scene);
 
-        //Choose top 50 Keypoints
-
         //-- Step 2: Calculate descriptors (feature vectors)
         extractor.compute(frm, keypoints_scene, descriptors_scene);
 
+        //-- Passing values to mainwindow.cpp
+        frameVector.push_back(frm);
+        keypoints_frameVector.push_back(keypoints_scene);
         descriptors_sceneVector.push_back(descriptors_scene);
 
         qDebug() << "Size of keypoints_scene bin = " << keypoints_scene.size();
-        qDebug() << "Size of Scence Descriptor:  " << descriptors_sceneVector.size() << " " << descriptors_scene.rows << " x " << descriptors_scene.cols;
+        qDebug() << "Size of Scene Descriptor:  " << descriptors_sceneVector.size() << ": " << descriptors_scene.rows << " x " << descriptors_scene.cols;
 
         j += Nth;
         capture->set(CV_CAP_PROP_POS_FRAMES, j);
