@@ -19,14 +19,14 @@ void FrameFeatures::processFrames()
     int frameRate = (int) capture->get(CV_CAP_PROP_FPS);
     int Nth = frameRate/2;
 
-    const int hes_thresh = 100;
+    const int hes_thresh = 600;
     SurfFeatureDetector detector(hes_thresh);
     //FastFeatureDetector detector(hes_thresh);
 
     detector.upright = 0; //orientation is computed
     detector.extended = 0;
-    detector.nOctaves = 1;
-    detector.nOctaveLayers = 4;
+    detector.nOctaves = 3;
+    detector.nOctaveLayers = 3;
     vector<KeyPoint> keypoints_scene;
     SurfDescriptorExtractor extractor;
     Mat descriptors_scene;

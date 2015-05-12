@@ -228,14 +228,14 @@ void MainWindow::Mouse_left()
 
 void MainWindow::processROI(Mat roi)
 { 
-    int hes_thresh = 100;
+    int hes_thresh = 600;
     SurfFeatureDetector detector(hes_thresh);
     //FastFeatureDetector detector(hes_thresh);
 
     detector.extended = 0;
     detector.upright = 0; //orientation is computed
-    detector.nOctaves = 1;
-    detector.nOctaveLayers = 4;
+    detector.nOctaves = 3;
+    detector.nOctaveLayers = 3;
     vector<KeyPoint> keypoints_object;
 
     SurfDescriptorExtractor extractor;
