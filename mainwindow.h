@@ -6,6 +6,7 @@
 #include <helperfunctions.h>
 #include <QtGui>
 
+
 namespace Ui {
 class MainWindow;
 }
@@ -30,6 +31,8 @@ private:
     Rect roi;
 
     void processROI(Mat roi);
+    void connectedComponents(Mat roi);
+    void getCascade(Mat roi);
 
 signals:
 

@@ -23,7 +23,7 @@ void FrameFeatures::processFrames()
     SurfFeatureDetector detector(hes_thresh);
     //FastFeatureDetector detector(hes_thresh);
 
-    detector.upright = 0; //orientation is computed
+    detector.upright = 1; //orientation is computed
     detector.extended = 0;
     detector.nOctaves = 3;
     detector.nOctaveLayers = 3;

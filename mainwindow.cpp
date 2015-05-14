@@ -225,27 +225,94 @@ void MainWindow::Mouse_left()
     ui->outLabel->left = true;
 }
 
+void MainWindow::connectedComponents(Mat roi)
+{
+   ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
+    cv::Mat roiBuffer = roi.clone();
+
+    // Threshold and morphology operations
+    //cv::threshold(roiBuffer,roiBuffer, 128, 255, cv::THRESH_BINARY);
+    adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 3, 0);
+    //cv::medianBlur(roiBuffer,roiBuffer,3);
+    //cv::erode(roiBuffer,roiBuffer,cv::Mat());
+    //cv::dilate(roiBuffer,roiBuffer,cv::Mat());
+    //GaussianBlur(roiBuffer, roiBuffer, Size(11,11), 0, 0);
+
+    cv::vector<cv::vector<cv::Point> > contours;
+    findContours( roiBuffer, contours, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
+    qDebug() << contours.size();
+
+
+    // Polygonal approximation
+    vector<vector<Point> > contours_poly( contours.size() );
+    for( int i = 0; i < contours.size(); i++ )
+    {approxPolyDP( Mat(contours[i]), contours_poly[i], 0.1*arcLength(contours[i],true), true );}
+
+    /// Find the convex hull object for each contour
+       vector<vector<Point> >hull( contours.size() );
+       for( int i = 0; i < contours.size(); i++ )
+          {  convexHull( Mat(contours[i]), hull[i], false ); }
+
+    /// Find contour with largest area
+    double maxArea = 0;
+    int maxIdx;
+    for( int i = 0; i < contours.size(); i++ )
+    {
+        double ctrArea = contourArea(contours[i]);
+        if (maxArea < ctrArea)
+        {
+            maxArea = ctrArea;
+            maxIdx = i;
+        }
+    }
+
+    if (roiBuffer.size().area() == contourArea(contours[maxIdx]) )
+        qDebug() << "Contour exceeds bounds!!!";
+
+    Mat contourROI;
+    Mat mask = Mat::zeros( roi.size(), roi.type());
+    drawContours( mask, contours, maxIdx, Scalar(255,255,255), CV_FILLED, 8);
+    bitwise_and(mask, roi, contourROI);
+    imshow("contourROI", contourROI);
+    ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
+}
+
+void MainWindow::getCascade(Mat roi)
+{
+    equalizeHist(roi, roi);
+
+    CascadeClassifier cascade;
+    vector<Rect> objects;
+    vector<int> reject_levels;
+    vector<double> level_weights;
+    const float scale_factor(1.2f);
+    const int min_neighbors(3);
+    cascade.detectMultiScale(roi, objects, reject_levels, level_weights, scale_factor, min_neighbors, CV_HAAR_FIND_BIGGEST_OBJECT);
+    qDebug() << objects.size();
+    Mat image_roi = roi.clone();
+    for (int i = 0; i < objects.size(); i++)
+    {
+        rectangle( image_roi, objects[i], Scalar(255,0,0), 2, 8, 0);
+        putText(image_roi, std::to_string(level_weights[i]), Point(objects[i].x, objects[i].y), 1, 1, Scalar(0,0,255));
+        qDebug() << i;
+    }
+    if (objects.size() > 0)
+        imshow("cascade", image_roi );}
 
 void MainWindow::processROI(Mat roi)
 { 
+    HelperFunctions::cleanPreviousWindows();
+    cvtColor(roi, roi, CV_BGR2GRAY);
+    connectedComponents(roi);
+    //getCascade(roi);
     int hes_thresh = 600;
     SurfFeatureDetector detector(hes_thresh);
-    //FastFeatureDetector detector(hes_thresh);
 
-    detector.extended = 0;
-    detector.upright = 0; //orientation is computed
-    detector.nOctaves = 3;
-    detector.nOctaveLayers = 3;
+    detector.extended = 0;detector.upright = 1;detector.nOctaves = 3;detector.nOctaveLayers = 3;
     vector<KeyPoint> keypoints_object;
-
     SurfDescriptorExtractor extractor;
     Mat descriptors_object;
     std::vector<cv::Mat> img_matchesVector;
-
-    cvtColor(roi, roi, CV_BGR2GRAY);
-
-    //GaussianBlur(roi, roi, Size(9, 9), 1.5, 1.5);
-    //equalizeHist(roi, roi); // Apply Histogram Equalization - Very bad idea!
 
     //-- Step 1: Detect the keypoints using SURF Detector
     detector.detect(roi, keypoints_object);
@@ -260,9 +327,7 @@ void MainWindow::processROI(Mat roi)
     std::vector< DMatch > matches;
     vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
 
-    HelperFunctions::cleanPreviousWindows();
-
-    //-- Draw keypoints
+    //-- Draw keypoints and dominant hull
     Mat img_keypoints_1;
     drawKeypoints( roi, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
     imshow("Keypoints 1", img_keypoints_1 );

@@ -13,8 +13,8 @@
 #include <opencv2/calib3d/calib3d.hpp> // for homography
 #include <opencv2/nonfree/nonfree.hpp>
 #include <opencv2/video/video.hpp>
+ #include <opencv2/objdetect/objdetect.hpp>
 //#include <opencv2/ml/ml.hpp>
-
 using namespace std;
 using namespace cv;
 
