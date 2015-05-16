@@ -361,7 +361,7 @@ void MainWindow::processROI(Mat roi)
         {
             if( matches[i].distance < max(2*min_dist, 0.02) )
             {
-                good_matches.push_back( matches[i]);
+                good_matches.push_back( matches[i] );
             }
         }
 
