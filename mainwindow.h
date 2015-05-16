@@ -31,7 +31,7 @@ private:
     Rect roi;
 
     void processROI(Mat roi);
-    void connectedComponents(Mat roi);
+    Mat connectedComponents(Mat roi);
     void getCascade(Mat roi);
 
 signals:

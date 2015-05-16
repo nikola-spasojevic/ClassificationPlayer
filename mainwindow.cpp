@@ -225,7 +225,7 @@ void MainWindow::Mouse_left()
     ui->outLabel->left = true;
 }
 
-void MainWindow::connectedComponents(Mat roi)
+Mat MainWindow::connectedComponents(Mat roi)
 {
    ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
     cv::Mat roiBuffer = roi.clone();
@@ -233,10 +233,10 @@ void MainWindow::connectedComponents(Mat roi)
     // Threshold and morphology operations
     //cv::threshold(roiBuffer,roiBuffer, 128, 255, cv::THRESH_BINARY);
     adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 3, 0);
-    //cv::medianBlur(roiBuffer,roiBuffer,3);
-    //cv::erode(roiBuffer,roiBuffer,cv::Mat());
-    //cv::dilate(roiBuffer,roiBuffer,cv::Mat());
-    //GaussianBlur(roiBuffer, roiBuffer, Size(11,11), 0, 0);
+    cv::medianBlur(roiBuffer,roiBuffer,3);
+    cv::erode(roiBuffer,roiBuffer,cv::Mat());
+    cv::dilate(roiBuffer,roiBuffer,cv::Mat());
+    GaussianBlur(roiBuffer, roiBuffer, Size(7,7), 1.5, 1.5);
 
     cv::vector<cv::vector<cv::Point> > contours;
     findContours( roiBuffer, contours, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
@@ -245,13 +245,14 @@ void MainWindow::connectedComponents(Mat roi)
 
     // Polygonal approximation
     vector<vector<Point> > contours_poly( contours.size() );
+    vector<vector<Point> >hull( contours.size() );
+    vector<Rect> boundRect( contours.size() );
     for( int i = 0; i < contours.size(); i++ )
-    {approxPolyDP( Mat(contours[i]), contours_poly[i], 0.1*arcLength(contours[i],true), true );}
-
-    /// Find the convex hull object for each contour
-       vector<vector<Point> >hull( contours.size() );
-       for( int i = 0; i < contours.size(); i++ )
-          {  convexHull( Mat(contours[i]), hull[i], false ); }
+    {
+        approxPolyDP( Mat(contours[i]), contours_poly[i], 0.1*arcLength(contours[i],true), true );
+        convexHull( Mat(contours[i]), hull[i], false );
+        boundRect[i] = boundingRect( Mat(contours_poly[i]) );
+    }
 
     /// Find contour with largest area
     double maxArea = 0;
@@ -272,8 +273,10 @@ void MainWindow::connectedComponents(Mat roi)
     Mat contourROI;
     Mat mask = Mat::zeros( roi.size(), roi.type());
     drawContours( mask, contours, maxIdx, Scalar(255,255,255), CV_FILLED, 8);
+    //rectangle( mask, boundRect[maxIdx].tl(), boundRect[maxIdx].br(), Scalar(255,255,255), -1, 8, 0);
     bitwise_and(mask, roi, contourROI);
     imshow("contourROI", contourROI);
+    return contourROI;
     ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
 }
 
@@ -303,7 +306,7 @@ void MainWindow::processROI(Mat roi)
 { 
     HelperFunctions::cleanPreviousWindows();
     cvtColor(roi, roi, CV_BGR2GRAY);
-    connectedComponents(roi);
+    Mat contourROI = connectedComponents(roi);
     //getCascade(roi);
     int hes_thresh = 600;
     SurfFeatureDetector detector(hes_thresh);
@@ -315,12 +318,12 @@ void MainWindow::processROI(Mat roi)
     std::vector<cv::Mat> img_matchesVector;
 
     //-- Step 1: Detect the keypoints using SURF Detector
-    detector.detect(roi, keypoints_object);
+    detector.detect(contourROI, keypoints_object);
     if (keypoints_object.size() < 4)
         return;
 
     //-- Step 2: Calculate descriptors (feature vectors)
-    extractor.compute( roi, keypoints_object, descriptors_object);
+    extractor.compute( contourROI, keypoints_object, descriptors_object);
 
     //-- Step 3: Matching descriptor vectors using FLANN matcher
     FlannBasedMatcher matcher;
@@ -329,7 +332,7 @@ void MainWindow::processROI(Mat roi)
 
     //-- Draw keypoints and dominant hull
     Mat img_keypoints_1;
-    drawKeypoints( roi, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
+    drawKeypoints( contourROI, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
     imshow("Keypoints 1", img_keypoints_1 );
 
     for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
@@ -366,7 +369,7 @@ void MainWindow::processROI(Mat roi)
         if (good_matches.size() >= 4)
         {
             Mat img_matches;
-            drawMatches( roi, keypoints_object, frame, keypoints_frame,
+            drawMatches( contourROI, keypoints_object, frame, keypoints_frame,
                     good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
                     vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 
