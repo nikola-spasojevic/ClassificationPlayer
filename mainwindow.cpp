@@ -190,7 +190,10 @@ void MainWindow::Mouse_current_pos()
 
 void MainWindow::Mouse_pressed()
 {
-    myPlayer->Stop();
+    if (myPlayer->isStopped())
+        myPlayer->Play();
+    else
+        myPlayer->Stop();
 }
 
 void MainWindow::Mouse_released()
@@ -198,7 +201,7 @@ void MainWindow::Mouse_released()
     QPoint mouse_pos = ui->outLabel->mouseCurrentPos();
     pxBuffer = pxBuffer.scaled(ui->outLabel->size());
 
-    if (myPlayer->isStopped() && mouse_pos.x() < ui->outLabel->width() && mouse_pos.y() < ui->outLabel->height() && mouse_pos.x() > 0 && mouse_pos.y() > 0)
+    if (myPlayer->isStopped() && mouse_pos.x() < ui->outLabel->width() && mouse_pos.y() < ui->outLabel->height() && mouse_pos.x() > 0 && mouse_pos.y() > 0 && prevPoint != QPoint(0,0))
     {
         roi = Rect(topLeftCorner.x(), topLeftCorner.y(), bottomRightCorner.x() - topLeftCorner.x(), bottomRightCorner.y() - topLeftCorner.y());
 
@@ -222,117 +225,194 @@ void MainWindow::Mouse_left()
     ui->outLabel->left = true;
 }
 
+Mat MainWindow::connectedComponents(Mat roi)
+{
+   ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
+    cv::Mat roiBuffer = roi.clone();
+    //cvtColor(roiBuffer, roiBuffer, CV_BGR2GRAY);
+
+    // Threshold and morphology operations
+    //cv::threshold(roiBuffer,roiBuffer, 128, 255, cv::THRESH_BINARY);
+    adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 3, 0);
+    cv::medianBlur(roiBuffer,roiBuffer,3);
+    cv::erode(roiBuffer,roiBuffer,cv::Mat());
+    cv::dilate(roiBuffer,roiBuffer,cv::Mat());
+    GaussianBlur(roiBuffer, roiBuffer, Size(7,7), 1.5, 1.5);
+
+    cv::vector<cv::vector<cv::Point> > contours;
+    findContours( roiBuffer, contours, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
+    qDebug() << contours.size();
+
+
+    // Polygonal approximation
+    vector<vector<Point> > contours_poly( contours.size() );
+    vector<vector<Point> >hull( contours.size() );
+    vector<Rect> boundRect( contours.size() );
+    for( int i = 0; i < contours.size(); i++ )
+    {
+        approxPolyDP( Mat(contours[i]), contours_poly[i], 0.1*arcLength(contours[i],true), true );
+        convexHull( Mat(contours[i]), hull[i], false );
+        boundRect[i] = boundingRect( Mat(contours_poly[i]) );
+    }
+
+    /// Find contour with largest area
+    double maxArea = 0;
+    int maxIdx;
+    for( int i = 0; i < contours.size(); i++ )
+    {
+        double ctrArea = contourArea(contours[i]);
+        if (maxArea < ctrArea)
+        {
+            maxArea = ctrArea;
+            maxIdx = i;
+        }
+    }
+
+    if (roiBuffer.size().area() == contourArea(contours[maxIdx]) )
+        qDebug() << "Contour exceeds bounds!!!";
+
+    Mat contourROI;
+    Mat mask = Mat::zeros( roi.size(), roi.type());
+    drawContours( mask, contours, maxIdx, Scalar(255,255,255), CV_FILLED, 8);
+    //rectangle( mask, boundRect[maxIdx].tl(), boundRect[maxIdx].br(), Scalar(255,255,255), -1, 8, 0);
+    bitwise_and(mask, roi, contourROI);
+    imshow("contourROI", contourROI);
+    return contourROI;
+    ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
+}
+
+void MainWindow::getCascade(Mat roi)
+{
+    equalizeHist(roi, roi);
+
+    CascadeClassifier cascade;
+    vector<Rect> objects;
+    vector<int> reject_levels;
+    vector<double> level_weights;
+    const float scale_factor(1.2f);
+    const int min_neighbors(3);
+    cascade.detectMultiScale(roi, objects, reject_levels, level_weights, scale_factor, min_neighbors, CV_HAAR_FIND_BIGGEST_OBJECT);
+    qDebug() << objects.size();
+    Mat image_roi = roi.clone();
+    for (int i = 0; i < objects.size(); i++)
+    {
+        rectangle( image_roi, objects[i], Scalar(255,0,0), 2, 8, 0);
+        putText(image_roi, std::to_string(level_weights[i]), Point(objects[i].x, objects[i].y), 1, 1, Scalar(0,0,255));
+        qDebug() << i;
+    }
+    if (objects.size() > 0)
+        imshow("cascade", image_roi );}
 
 void MainWindow::processROI(Mat roi)
-{
-    const int hes_thresh = 1500;
-    SurfFeatureDetector detector(hes_thresh);
-    detector.upright = 1; //orientation is not computed
-    vector<KeyPoint> keypoints_object;
-    SurfDescriptorExtractor extractor;
-    Mat descriptors_object;
-
+{ 
+    HelperFunctions::cleanPreviousWindows();
     cvtColor(roi, roi, CV_BGR2GRAY);
-    GaussianBlur(roi, roi, Size(7,7), 1.5, 1.5);
+    Mat contourROI = connectedComponents(roi);
+    Ptr<FeatureDetector> detector;
+    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 5000, 10000, 10);
+    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SIFT");
+
+    vector<KeyPoint> keypoints_object;
+    Mat descriptors_object;
+    std::vector<cv::Mat> img_matchesVector;
 
     //-- Step 1: Detect the keypoints using SURF Detector
-    detector.detect(roi, keypoints_object);
+    detector->detect(contourROI, keypoints_object);
+    if (keypoints_object.size() < 4)
+        return;
 
     //-- Step 2: Calculate descriptors (feature vectors)
-    extractor.compute( roi, keypoints_object, descriptors_object);
-
-    /*** Image Keypoint window***/
-    //Mat img_keypoints;
-    //cv::drawKeypoints(roi, keypoints_object, img_keypoints);
-    //cv::imshow("Image Keypoints", img_keypoints);
-    /*** Image Keypoint window***/
+    extractor->compute( contourROI, keypoints_object, descriptors_object);
 
     //-- Step 3: Matching descriptor vectors using FLANN matcher
-    FlannBasedMatcher matcher;
-    std::vector< DMatch > matches;
     vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
+    vector<DMatch> matches;
+    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
+
+    //-- Draw keypoints and dominant hull
+    Mat img_keypoints_1;
+    drawKeypoints( contourROI, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
+    imshow("Keypoints", img_keypoints_1 );
 
     for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
     {
         cv::Mat descriptors_scene = descriptors_sceneVector.at(i);
+        cv::Mat frame = myPlayer->frameFeatures->frameVector.at(i);
+        vector<KeyPoint> keypoints_frame = myPlayer->frameFeatures->keypoints_frameVector.at(i);
 
-        matcher.match( descriptors_object, descriptors_scene, matches );
+        //Match the features found in the object roi with the features found in each scene using Fast Approximate Nearest Neighbor Search
+        matcher->match( descriptors_object, descriptors_scene, matches);
 
-        if (matches.size() > 4)
+        double max_dist = 0; double min_dist = 10000;
+
+        //-- Quick calculation of max and min distances between keypoints
+        for( int i = 0; i < descriptors_object.rows; i++ )
         {
-            double max_dist = 0; double min_dist = 100;
+            double dist = matches[i].distance;
+            if( dist < min_dist ) min_dist = dist;
+            if( dist > max_dist ) max_dist = dist;
+        }
 
-            //-- Quick calculation of max and min distances between keypoints
-            for( int i = 0; i < descriptors_object.rows; i++ )
+        //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
+        std::vector< DMatch > good_matches;
+
+        for( int i = 0; i < descriptors_object.rows; i++ )
+        {
+            double distNrm = HelperFunctions::normalise(matches[i].distance, min_dist, max_dist);
+            if( distNrm < 0.7 )
             {
-                double dist = matches[i].distance;
-                if( dist < min_dist ) min_dist = dist;
-                if( dist > max_dist ) max_dist = dist;
+                good_matches.push_back( matches[i] );
             }
+        }
 
-            //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
-            std::vector< DMatch > good_matches;
-
-            for( int i = 0; i < descriptors_object.rows; i++ )
-            {
-                if( matches[i].distance < 3*min_dist )
-                {
-                    good_matches.push_back( matches[i]);
-                }
-            }
-
-            Mat frame = myPlayer->
-
+        //if there are more than 10 similar feature points then process and find similarities
+        if (good_matches.size() >= 4)
+        {
             Mat img_matches;
-            drawMatches( roi, keypoints_object, frame, keypoints_frame,
-                        good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
-                        vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+            drawMatches( contourROI, keypoints_object, frame, keypoints_frame,
+                    good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
+                    vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 
+            //-- Localize the object
+            std::vector<Point2f> obj;
+            std::vector<Point2f> scene;
 
+            for( int i = 0; i < good_matches.size(); i++ )
+            {
+                //-- Get the keypoints from the good matches
+                obj.push_back( keypoints_object[ good_matches[i].queryIdx ].pt );
+                scene.push_back( keypoints_frame[ good_matches[i].trainIdx ].pt );
+            }
 
+            Mat H = findHomography( obj, scene, CV_RANSAC );
 
+            if (HelperFunctions::niceHomography(&H))
+            {
+                //-- Get the corners from the object  to be "detected"
+                std::vector<Point2f> obj_corners(4);
+                obj_corners[0] = cvPoint(0,0); obj_corners[1] = cvPoint( roi.cols, 0 );
+                obj_corners[2] = cvPoint( roi.cols, roi.rows ); obj_corners[3] = cvPoint( 0, roi.rows );
+                std::vector<Point2f> scene_corners(4);
 
+                perspectiveTransform( obj_corners, scene_corners, H);
+
+                //-- Draw lines between the corners (the mapped object in the scene)
+                line( img_matches, scene_corners[0] + Point2f( roi.cols, 0), scene_corners[1] + Point2f( roi.cols, 0), Scalar(0, 255, 0), 4 );
+                line( img_matches, scene_corners[1] + Point2f( roi.cols, 0), scene_corners[2] + Point2f( roi.cols, 0), Scalar( 0, 255, 0), 4 );
+                line( img_matches, scene_corners[2] + Point2f( roi.cols, 0), scene_corners[3] + Point2f( roi.cols, 0), Scalar( 0, 255, 0), 4 );
+                line( img_matches, scene_corners[3] + Point2f( roi.cols, 0), scene_corners[0] + Point2f( roi.cols, 0), Scalar( 0, 255, 0), 4 );
+
+                /******* Adjust the aspect ratio of the pre-processed frame*******/
+                cv::resize(img_matches, img_matches, cvSize(ui->outLabel->width()/2, ui->outLabel->height()/2));
+
+                img_matchesVector.push_back(img_matches);
+                Mat displayConcat = HelperFunctions::createOne(img_matchesVector, 1, 5);
+
+                //-- Show detected matches
+                startWindowThread();
+                string s = "Good Matches & Object detection";
+                imshow( s, displayConcat );
+            }
         }
-
-
-
-
-
-
-
-
-        //-- Localize the object
-        std::vector<Point2f> obj;
-        std::vector<Point2f> scene;
-
-        for( int i = 0; i < good_matches.size(); i++ )
-        {
-            //-- Get the keypoints from the good matches
-            obj.push_back( keypoints_object[ good_matches[i].queryIdx ].pt );
-            scene.push_back( keypoints_scene[ good_matches[i].trainIdx ].pt );
-        }
-
-        Mat H = findHomography( obj, scene, CV_RANSAC );
-
-        //-- Get the corners from the image_1 ( the object to be "detected" )
-          std::vector<Point2f> obj_corners(4);
-          obj_corners[0] = cvPoint(0,0); obj_corners[1] = cvPoint( img_object.cols, 0 );
-          obj_corners[2] = cvPoint( img_object.cols, img_object.rows ); obj_corners[3] = cvPoint( 0, img_object.rows );
-          std::vector<Point2f> scene_corners(4);
-
-          perspectiveTransform( obj_corners, scene_corners, H);
-
-          //-- Draw lines between the corners (the mapped object in the scene - image_2 )
-          //line( img_matches, scene_corners[0] + Point2f( img_object.cols, 0), scene_corners[1] + Point2f( img_object.cols, 0), Scalar(0, 255, 0), 4 );
-          //line( img_matches, scene_corners[1] + Point2f( img_object.cols, 0), scene_corners[2] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-          //line( img_matches, scene_corners[2] + Point2f( img_object.cols, 0), scene_corners[3] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-          //line( img_matches, scene_corners[3] + Point2f( img_object.cols, 0), scene_corners[0] + Point2f( img_object.cols, 0), Scalar( 0, 255, 0), 4 );
-
-          //-- Show detected matches
-          imshow( "Good Matches & Object detection", img_matches );
     }
-
-
-
-
 }

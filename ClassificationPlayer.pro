@@ -37,7 +37,8 @@ LIBS += -L/usr/local/Cellar/opencv/2.4.9/lib \
 -lopencv_features2d \
 -lopencv_calib3d \
 -lopencv_nonfree \
--lopencv_video
+-lopencv_video \
+-lopencv_objdetect
 
 INCLUDEPATH += $$PWD/../../../../../usr/local/Cellar/opencv/2.4.9/include
 DEPENDPATH += $$PWD/../../../../../usr/local/Cellar/opencv/2.4.9/include

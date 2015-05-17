@@ -173,7 +173,7 @@ void Player::Tracking()
     rawFrame = frame.clone();
     rawCopyFrame = rawFrame.clone();
 
-    mog(rawFrame,foregroundFrame,-1); // Background subtraction
+    mog(rawFrame, foregroundFrame, -1); // Background subtraction
     mog.set("nmixtures", 2);
     mog.set("detectShadows",0);
 
