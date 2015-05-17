@@ -229,7 +229,7 @@ Mat MainWindow::connectedComponents(Mat roi)
 {
    ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
     cv::Mat roiBuffer = roi.clone();
-    //cvtColor(roiBuffer, roiBuffer, CV_BGR2GRAY);
+    cvtColor(roiBuffer, roiBuffer, CV_BGR2GRAY);
 
     // Threshold and morphology operations
     //cv::threshold(roiBuffer,roiBuffer, 128, 255, cv::THRESH_BINARY);
@@ -306,7 +306,7 @@ void MainWindow::getCascade(Mat roi)
 void MainWindow::processROI(Mat roi)
 { 
     HelperFunctions::cleanPreviousWindows();
-    cvtColor(roi, roi, CV_BGR2GRAY);
+    //cvtColor(roi, roi, CV_BGR2GRAY);
     Mat contourROI = connectedComponents(roi);
     Ptr<FeatureDetector> detector;
     detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 5000, 10000, 10);
@@ -330,9 +330,9 @@ void MainWindow::processROI(Mat roi)
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
 
     //-- Draw keypoints and dominant hull
-    Mat img_keypoints_1;
-    drawKeypoints( contourROI, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
-    imshow("Keypoints", img_keypoints_1 );
+    //Mat img_keypoints_1;
+    //drawKeypoints( contourROI, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
+    //imshow("Keypoints", img_keypoints_1 );
 
     for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
     {
