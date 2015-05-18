@@ -27,13 +27,12 @@ public:
     void processFrames();
     void setFilename(string filename);
     vector<cv::Mat > getFeatureVectors();
-    void buildClassifier();
 
     vector<cv::Mat> frameVector;
     vector<vector<KeyPoint> > keypoints_frameVector;
     vector<cv::Mat > descriptors_sceneVector;
     string filename;
-    bool found;
+    bool found;    
 
 signals:
     void onFeaturesFound(const bool &found);

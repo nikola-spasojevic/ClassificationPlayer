@@ -171,9 +171,10 @@ void MainWindow::Mouse_current_pos()
             pen.setWidth( 5 );
             p.setPen(pen);
             p.drawLine (mouse_pos.x(), mouse_pos.y(), prevPoint.x(), prevPoint.y());
-            p.end ();
+            p.end();
             ui->outLabel->setPixmap(px);
 
+            /*
             if (mouse_pos.x() < topLeftCorner.x())
                 topLeftCorner.setX(mouse_pos.x());
             if (mouse_pos.y() < topLeftCorner.y())
@@ -182,18 +183,43 @@ void MainWindow::Mouse_current_pos()
                 bottomRightCorner.setX(mouse_pos.x());
             if (mouse_pos.y() > bottomRightCorner.y())
                 bottomRightCorner.setY(mouse_pos.y());
+            */
+
+
+            if (mouse_pos.x() > 60)
+                topLeftCorner.setX(mouse_pos.x() - 60);
+            else
+                topLeftCorner.setX(mouse_pos.x());
+
+            if (mouse_pos.y() > 60)
+                topLeftCorner.setY(mouse_pos.y() - 60);
+            else
+                topLeftCorner.setY(mouse_pos.y());
+
+            if (mouse_pos.x() < (ui->outLabel->width() - 60))
+                bottomRightCorner.setX(mouse_pos.x() + 60);
+            else
+                bottomRightCorner.setX(mouse_pos.x());
+
+            if (mouse_pos.y() < (ui->outLabel->height() - 60) )
+                bottomRightCorner.setY(mouse_pos.y() + 60);
         }
 
         prevPoint = mouse_pos;
     }
+
+
+
 }
 
 void MainWindow::Mouse_pressed()
 {
+    /*
     if (myPlayer->isStopped())
         myPlayer->Play();
     else
         myPlayer->Stop();
+    */
 }
 
 void MainWindow::Mouse_released()
@@ -309,7 +335,7 @@ void MainWindow::processROI(Mat roi)
     //cvtColor(roi, roi, CV_BGR2GRAY);
     Mat contourROI = connectedComponents(roi);
     Ptr<FeatureDetector> detector;
-    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 5000, 10000, 10);
+    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 100, 1000, 3);
     Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SIFT");
 
     vector<KeyPoint> keypoints_object;
@@ -326,7 +352,7 @@ void MainWindow::processROI(Mat roi)
 
     //-- Step 3: Matching descriptor vectors using FLANN matcher
     vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
-    vector<DMatch> matches;
+    vector<vector<DMatch> > matches;
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
 
     //-- Draw keypoints and dominant hull
@@ -341,10 +367,15 @@ void MainWindow::processROI(Mat roi)
         vector<KeyPoint> keypoints_frame = myPlayer->frameFeatures->keypoints_frameVector.at(i);
 
         //Match the features found in the object roi with the features found in each scene using Fast Approximate Nearest Neighbor Search
-        matcher->match( descriptors_object, descriptors_scene, matches);
+        matcher->knnMatch( descriptors_object, descriptors_scene, matches, 2);// Find two nearest matches
 
         double max_dist = 0; double min_dist = 10000;
 
+        //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
+        std::vector< DMatch > good_matches;
+        const float ratio = 0.9; // As in Lowe's paper; can be tuned
+
+        /*
         //-- Quick calculation of max and min distances between keypoints
         for( int i = 0; i < descriptors_object.rows; i++ )
         {
@@ -353,17 +384,25 @@ void MainWindow::processROI(Mat roi)
             if( dist > max_dist ) max_dist = dist;
         }
 
-        //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
-        std::vector< DMatch > good_matches;
-
         for( int i = 0; i < descriptors_object.rows; i++ )
         {
             double distNrm = HelperFunctions::normalise(matches[i].distance, min_dist, max_dist);
-            if( distNrm < 0.7 )
+            if( distNrm < 0.3 )
             {
                 good_matches.push_back( matches[i] );
             }
         }
+        */
+
+        for (int i = 0; i < matches.size(); ++i)
+        {
+            if (matches[i][0].distance < ratio * matches[i][1].distance)
+            {
+                good_matches.push_back(matches[i][0]);
+            }
+        }
+
+        qDebug() << good_matches.size();
 
         //if there are more than 10 similar feature points then process and find similarities
         if (good_matches.size() >= 4)

@@ -27,9 +27,11 @@ void FrameFeatures::processFrames()
     Mat descriptors_scene;
 
     Ptr<FeatureDetector> detector;
-    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 5000, 10000, 10);
+    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 1000, 2000, 3);
     Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SIFT");
 
+    int vocabularySize = 300;
+    BOWKMeansTrainer bowTrainer(vocabularySize);
 
     while( j < (numberOfFrames-Nth+1) && !frm.empty() )
     {
@@ -54,6 +56,8 @@ void FrameFeatures::processFrames()
         capture->set(CV_CAP_PROP_POS_FRAMES, j);
         capture->read(frm);// get every Nth frame (every second of video)
         found = true;
+
+        bowTrainer.add(descriptors_scene);
     }
 
     emit onFeaturesFound(found);
@@ -67,31 +71,4 @@ void FrameFeatures::setFilename(string filename)
 vector<cv::Mat > FrameFeatures::getFeatureVectors()
 {
     return this->descriptors_sceneVector;
-}
-
-void buildClassifier()
-{
-    /*
-    CvANN_MLP mlp;
-    CvTermCriteria criteria;
-    criteria.max_iter = 100;
-    criteria.epsilon = 0.00001f;
-    criteria.type = CV_TERMCRIT_ITER | CV_TERMCRIT_EPS;
-    CvANN_MLP_TrainParams params;
-    params.train_method = CvANN_MLP_TrainParams::BACKPROP; params.bp_dw_scale = 0.05f;
-    params.bp_moment_scale = 0.05f;
-    params.term_crit = criteria;
-
-    cv::Mat layers = cv::Mat(4, 1, CV_32SC1);
-
-    layers.row(0) = cv::Scalar(2);
-    layers.row(1) = cv::Scalar(10);
-    layers.row(2) = cv::Scalar(15);
-    layers.row(3) = cv::Scalar(1);
-
-    mlp.create(layers);
-
-    //mlp.train(trainingData , trainingClasses , cv::Mat(), cv::Mat(), params);
-
-    */
 }
