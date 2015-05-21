@@ -6,6 +6,8 @@
 #include <helperfunctions.h>
 #include <QtGui>
 
+#define VOCABULARY_SIZE 3000
+
 
 namespace Ui {
 class MainWindow;
@@ -22,6 +24,7 @@ public:
 private:
     Ui::MainWindow *ui;
     Player* myPlayer;
+
     vector< vector<KeyPoint> >  featureVec;
 
     QPoint prevPoint;
@@ -30,9 +33,13 @@ private:
     QPixmap px, pxBuffer;
     Rect roi;
 
+    BOWKMeansTrainer* bowTrainer =  new BOWKMeansTrainer(VOCABULARY_SIZE, TermCriteria(CV_TERMCRIT_ITER, 10, 0.001), 1, KMEANS_PP_CENTERS); //number of clusters
+
     void processROI(Mat roi);
     Mat connectedComponents(Mat roi);
     void getCascade(Mat roi);
+    //void extractBOWDescriptor(Mat& descriptors, Mat& labels);
+    void clustering();
 
 signals:
 

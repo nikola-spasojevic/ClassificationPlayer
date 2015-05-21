@@ -174,56 +174,45 @@ void MainWindow::Mouse_current_pos()
             p.end();
             ui->outLabel->setPixmap(px);
 
-            /*
-            if (mouse_pos.x() < topLeftCorner.x())
-                topLeftCorner.setX(mouse_pos.x());
-            if (mouse_pos.y() < topLeftCorner.y())
-                topLeftCorner.setY(mouse_pos.y());
-            if (mouse_pos.x() > bottomRightCorner.x())
-                bottomRightCorner.setX(mouse_pos.x());
-            if (mouse_pos.y() > bottomRightCorner.y())
-                bottomRightCorner.setY(mouse_pos.y());
-            */
-
-
             if (mouse_pos.x() > 60)
                 topLeftCorner.setX(mouse_pos.x() - 60);
             else
-                topLeftCorner.setX(mouse_pos.x());
-
+                topLeftCorner.setX(0);
             if (mouse_pos.y() > 60)
                 topLeftCorner.setY(mouse_pos.y() - 60);
             else
-                topLeftCorner.setY(mouse_pos.y());
-
+                topLeftCorner.setY(0);
             if (mouse_pos.x() < (ui->outLabel->width() - 60))
                 bottomRightCorner.setX(mouse_pos.x() + 60);
             else
-                bottomRightCorner.setX(mouse_pos.x());
-
+                bottomRightCorner.setX(ui->outLabel->width());
             if (mouse_pos.y() < (ui->outLabel->height() - 60) )
                 bottomRightCorner.setY(mouse_pos.y() + 60);
+            else
+                bottomRightCorner.setY(ui->outLabel->height());
+        }
+
+        if (mouse_pos.x() < ui->outLabel->width() && mouse_pos.y() < ui->outLabel->height() && mouse_pos.x() > 0 && mouse_pos.y() > 0 && prevPoint != QPoint(0,0))
+        {
+            roi = Rect(topLeftCorner.x(), topLeftCorner.y(), bottomRightCorner.x() - topLeftCorner.x(), bottomRightCorner.y() - topLeftCorner.y());
+            pxBuffer = pxBuffer.scaled(ui->outLabel->size());
+            cv::Mat frame = HelperFunctions::QPixmapToCvMat(pxBuffer);
+            cv::Mat mask = frame(roi);
+            processROI(mask);
         }
 
         prevPoint = mouse_pos;
     }
-
-
-
 }
 
 void MainWindow::Mouse_pressed()
 {
-    /*
-    if (myPlayer->isStopped())
-        myPlayer->Play();
-    else
-        myPlayer->Stop();
-    */
+    prevPoint = QPoint(0,0);
 }
 
 void MainWindow::Mouse_released()
 {
+    /*
     QPoint mouse_pos = ui->outLabel->mouseCurrentPos();
     pxBuffer = pxBuffer.scaled(ui->outLabel->size());
 
@@ -236,14 +225,15 @@ void MainWindow::Mouse_released()
 
         processROI(mask);
 
-        cv::namedWindow("Selected Feature");
-        cv::imshow("Selected Feature", mask);
+        //cv::namedWindow("Selected Feature");
+        //cv::imshow("Selected Feature", mask);
 
         myPlayer->Play();
         prevPoint = QPoint(0,0);
         topLeftCorner = QPoint(ui->outLabel->width() ,ui->outLabel->height());
         bottomRightCorner = QPoint(0,0);
     }
+    */
 }
 
 void MainWindow::Mouse_left()
@@ -255,10 +245,10 @@ Mat MainWindow::connectedComponents(Mat roi)
 {
    ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
     cv::Mat roiBuffer = roi.clone();
+    cv::Mat roiBufferCopy = roi.clone();
     cvtColor(roiBuffer, roiBuffer, CV_BGR2GRAY);
 
     // Threshold and morphology operations
-    //cv::threshold(roiBuffer,roiBuffer, 128, 255, cv::THRESH_BINARY);
     adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 3, 0);
     cv::medianBlur(roiBuffer,roiBuffer,3);
     cv::erode(roiBuffer,roiBuffer,cv::Mat());
@@ -268,7 +258,6 @@ Mat MainWindow::connectedComponents(Mat roi)
     cv::vector<cv::vector<cv::Point> > contours;
     findContours( roiBuffer, contours, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
     qDebug() << contours.size();
-
 
     // Polygonal approximation
     vector<vector<Point> > contours_poly( contours.size() );
@@ -287,12 +276,13 @@ Mat MainWindow::connectedComponents(Mat roi)
     for( int i = 0; i < contours.size(); i++ )
     {
         double ctrArea = contourArea(contours[i]);
-        if (maxArea < ctrArea)
+        if ( maxArea < ctrArea)
         {
             maxArea = ctrArea;
             maxIdx = i;
         }
     }
+    qDebug() << maxArea;
 
     if (roiBuffer.size().area() == contourArea(contours[maxIdx]) )
         qDebug() << "Contour exceeds bounds!!!";
@@ -300,9 +290,20 @@ Mat MainWindow::connectedComponents(Mat roi)
     Mat contourROI;
     Mat mask = Mat::zeros( roi.size(), roi.type());
     drawContours( mask, contours, maxIdx, Scalar(255,255,255), CV_FILLED, 8);
-    //rectangle( mask, boundRect[maxIdx].tl(), boundRect[maxIdx].br(), Scalar(255,255,255), -1, 8, 0);
+
+    drawContours( roiBufferCopy, contours, maxIdx, Scalar(0,150,0), 2, 8);
+    cv::Rect roi_temp(Point(topLeftCorner.x(), topLeftCorner.y()), roi.size());
+
+    //Pixmap to Mat
+    pxBuffer = pxBuffer.scaled(ui->outLabel->size());
+    cv::Mat frame = HelperFunctions::QPixmapToCvMat(pxBuffer);
+    roiBufferCopy.copyTo(frame(roi_temp));
+    px = HelperFunctions::cvMatToQPixmap(frame);
+    ui->outLabel->setScaledContents(true);
+    ui->outLabel->setAlignment(Qt::AlignCenter);
+    px = px.scaled(ui->outLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation);
+    ui->outLabel->setPixmap(px);
     bitwise_and(mask, roi, contourROI);
-    imshow("contourROI", contourROI);
     return contourROI;
     ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
 }
@@ -327,7 +328,8 @@ void MainWindow::getCascade(Mat roi)
         qDebug() << i;
     }
     if (objects.size() > 0)
-        imshow("cascade", image_roi );}
+        imshow("cascade", image_roi );
+}
 
 void MainWindow::processROI(Mat roi)
 { 
@@ -335,14 +337,14 @@ void MainWindow::processROI(Mat roi)
     //cvtColor(roi, roi, CV_BGR2GRAY);
     Mat contourROI = connectedComponents(roi);
     Ptr<FeatureDetector> detector;
-    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 100, 1000, 3);
-    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SIFT");
+    detector = new PyramidAdaptedFeatureDetector(new DynamicAdaptedFeatureDetector ( new FastAdjuster(40,true), 500, 1000, 3), 4);
+    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
 
     vector<KeyPoint> keypoints_object;
     Mat descriptors_object;
     std::vector<cv::Mat> img_matchesVector;
 
-    //-- Step 1: Detect the keypoints using SURF Detector
+    //-- Step 1: Detect the keypoints
     detector->detect(contourROI, keypoints_object);
     if (keypoints_object.size() < 4)
         return;
@@ -355,11 +357,9 @@ void MainWindow::processROI(Mat roi)
     vector<vector<DMatch> > matches;
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
 
-    //-- Draw keypoints and dominant hull
-    //Mat img_keypoints_1;
-    //drawKeypoints( contourROI, keypoints_object, img_keypoints_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
-    //imshow("Keypoints", img_keypoints_1 );
+    //bowTrainer->add(descriptors_object);
 
+    /*
     for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
     {
         cv::Mat descriptors_scene = descriptors_sceneVector.at(i);
@@ -367,32 +367,12 @@ void MainWindow::processROI(Mat roi)
         vector<KeyPoint> keypoints_frame = myPlayer->frameFeatures->keypoints_frameVector.at(i);
 
         //Match the features found in the object roi with the features found in each scene using Fast Approximate Nearest Neighbor Search
+        matcher->clear();
         matcher->knnMatch( descriptors_object, descriptors_scene, matches, 2);// Find two nearest matches
-
-        double max_dist = 0; double min_dist = 10000;
 
         //-- Draw only "good" matches (i.e. whose distance is less than 3*min_dist )
         std::vector< DMatch > good_matches;
-        const float ratio = 0.9; // As in Lowe's paper; can be tuned
-
-        /*
-        //-- Quick calculation of max and min distances between keypoints
-        for( int i = 0; i < descriptors_object.rows; i++ )
-        {
-            double dist = matches[i].distance;
-            if( dist < min_dist ) min_dist = dist;
-            if( dist > max_dist ) max_dist = dist;
-        }
-
-        for( int i = 0; i < descriptors_object.rows; i++ )
-        {
-            double distNrm = HelperFunctions::normalise(matches[i].distance, min_dist, max_dist);
-            if( distNrm < 0.3 )
-            {
-                good_matches.push_back( matches[i] );
-            }
-        }
-        */
+        const float ratio = 0.82; // As in Lowe's paper; can be tuned
 
         for (int i = 0; i < matches.size(); ++i)
         {
@@ -441,7 +421,7 @@ void MainWindow::processROI(Mat roi)
                 line( img_matches, scene_corners[2] + Point2f( roi.cols, 0), scene_corners[3] + Point2f( roi.cols, 0), Scalar( 0, 255, 0), 4 );
                 line( img_matches, scene_corners[3] + Point2f( roi.cols, 0), scene_corners[0] + Point2f( roi.cols, 0), Scalar( 0, 255, 0), 4 );
 
-                /******* Adjust the aspect ratio of the pre-processed frame*******/
+                // Adjust the aspect ratio of the pre-processed frame
                 cv::resize(img_matches, img_matches, cvSize(ui->outLabel->width()/2, ui->outLabel->height()/2));
 
                 img_matchesVector.push_back(img_matches);
@@ -454,4 +434,85 @@ void MainWindow::processROI(Mat roi)
             }
         }
     }
+*/
+
 }
+
+
+void MainWindow::clustering()
+{
+    /************* TRAINING VOCABULARY **************/
+    //Training the Bag of Words model with the selected feature components
+
+    vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
+    for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
+    {
+        bowTrainer->add(descriptors_sceneVector.at(i));
+    }
+/*
+        int count=0;
+        for(vector<Mat>::iterator iter = descriptors_object.begin();iter!=descriptors_object.end();iter++)
+        {
+            count += iter->rows;
+        }
+        cout<<"Clustering "<<count<<" features"<<endl;
+
+        //Mat dictionary = bowTrainer.cluster();
+
+        //Create the Vocabulary with KMeans
+        Mat vocabulary = bowTrainer->cluster();
+        //qDebug() << vocabulary.size().height << " x " << vocabulary.size().width;
+
+        //Since we now have a Vocabulary, compute the occurence of delegate in object
+        BOWImgDescriptorExtractor bowDE( extractor, matcher);
+        //Set the vocabulary
+        bowDE.setVocabulary(vocabulary);
+        cout<<"Processing training data..."<<endl;
+
+        Mat trainingData(0, dictionarySize, CV_32FC1);
+        Mat labels(0, 1, CV_32FC1);
+        //extractBOWDescriptor(path(TRAINING_DATA_DIR), trainingData, labels);
+
+        NormalBayesClassifier classifier;
+            cout<<"Training classifier..."<<endl;
+
+}*/
+        /************* TRAINING VOCABULARY **************/
+}
+
+/*
+void extractBOWDescriptor(const path& basepath, Mat& descriptors, Mat& labels)
+{
+    for (directory_iterator iter = directory_iterator(basepath); iter
+            != directory_iterator(); iter++) {
+        directory_entry entry = *iter;
+        if (is_directory(entry.path())) {
+            cout << "Processing directory " << entry.path().string() << endl;
+            extractBOWDescriptor(entry.path(), descriptors, labels);
+        } else {
+            path entryPath = entry.path();
+            if (entryPath.extension() == ".jpg") {
+                cout << "Processing file " << entryPath.string() << endl;
+                Mat img = imread(entryPath.string());
+                if (!img.empty()) {
+                    vector<KeyPoint> keypoints;
+                    detector->detect(img, keypoints);
+                    if (keypoints.empty()) {
+                        cerr << "Warning: Could not find key points in image: "
+                                << entryPath.string() << endl;
+                    } else {
+                        Mat bowDescriptor;
+                        bowDE.compute(img, keypoints, bowDescriptor);
+                        descriptors.push_back(bowDescriptor);
+                        float label=atof(entryPath.filename().c_str());
+                        labels.push_back(label);
+                    }
+                } else {
+                    cerr << "Warning: Could not read image: "
+                            << entryPath.string() << endl;
+                }
+            }
+        }
+    }
+}
+*/

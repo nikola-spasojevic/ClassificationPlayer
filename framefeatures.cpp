@@ -27,11 +27,8 @@ void FrameFeatures::processFrames()
     Mat descriptors_scene;
 
     Ptr<FeatureDetector> detector;
-    detector = new DynamicAdaptedFeatureDetector ( new FastAdjuster(10,true), 1000, 2000, 3);
-    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SIFT");
-
-    int vocabularySize = 300;
-    BOWKMeansTrainer bowTrainer(vocabularySize);
+    detector =  new PyramidAdaptedFeatureDetector( new DynamicAdaptedFeatureDetector ( new FastAdjuster(40,true), 1000, 2000, 5), 4);
+    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
 
     while( j < (numberOfFrames-Nth+1) && !frm.empty() )
     {
@@ -52,12 +49,10 @@ void FrameFeatures::processFrames()
         qDebug() << "Size of keypoints_scene bin = " << keypoints_scene.size();
         qDebug() << "Size of Scene Descriptor:  " << descriptors_sceneVector.size() << ": " << descriptors_scene.rows << " x " << descriptors_scene.cols;
 
-        j += Nth;
-        capture->set(CV_CAP_PROP_POS_FRAMES, j);
+        //j += Nth;
+        //capture->set(CV_CAP_PROP_POS_FRAMES, j);
         capture->read(frm);// get every Nth frame (every second of video)
         found = true;
-
-        bowTrainer.add(descriptors_scene);
     }
 
     emit onFeaturesFound(found);
