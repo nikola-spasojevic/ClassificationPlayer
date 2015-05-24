@@ -31,9 +31,11 @@ class Player : public QThread
  signals:
     void originalImage(const QImage &image);
     void processedImage(const QImage &imgProcessed);
+    void dictionaryPassed(const bool &dictionary);
 
  public slots:
     void onFeaturesPassed(bool found);
+    void onDictionaryPassed(bool dictionary);
 
  protected:
      void run();
@@ -54,6 +56,7 @@ class Player : public QThread
     void Tracking();
     void getFeatureHeatMap();
     vector<cv::Mat > featureVectorPerFrame;
+    Mat dictionary;
     FrameFeatures *frameFeatures;
 
     /**************** Tracking ****************/

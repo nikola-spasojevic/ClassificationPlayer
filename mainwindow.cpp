@@ -5,12 +5,14 @@ const bool processed = false;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow)
+    ui(new Ui::MainWindow),
+    bowDE(extractor, matcher)
 {
     /**************** FRAME PROCESSING ****************/
     myPlayer = new Player();
     QObject::connect(myPlayer, SIGNAL(originalImage(QImage)), this, SLOT(updatePlayerUI(QImage)));
     QObject::connect(myPlayer, SIGNAL(processedImage(QImage)), this, SLOT(processedPlayerUI(QImage)));
+    QObject::connect(myPlayer, SIGNAL(dictionaryPassed(bool)), this, SLOT(dictionaryReceived(bool)));
     /**************** FRAME PROCESSING ****************/
 
     ui->setupUi(this);
@@ -19,10 +21,15 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->horizontalSlider->setEnabled(false);
 
     /**************** FEATURE SELECTION ****************/
+    window = cv::Rect(0, 0, 60, 60);//Window initialisation, setting width = 60, height = 60
     prevPoint = QPoint(0,0);
     topLeftCorner = QPoint(1600 ,1600);
     bottomRightCorner = QPoint(0,0);
     /**************** FEATURE SELECTION ****************/
+
+    /**************** FEATURE DESCRIPTION AND EXTRACTION ****************/
+    isDictionarySet = false;
+    /**************** FEATURE DESCRIPTION AND EXTRACTION ****************/
 
     /**************** MOUSE TRACKING ****************/
     QWidget::connect(ui->outLabel, SIGNAL(Mouse_Move()), this, SLOT(Mouse_current_pos()));
@@ -72,6 +79,19 @@ void MainWindow::processedPlayerUI(QImage processedImg)
     }
 }
 
+void MainWindow::dictionaryReceived(bool voc)
+{
+    isDictionarySet = true;
+    qDebug() << "is dictionary empty: " << myPlayer->dictionary.empty();
+    bowDE.setVocabulary(myPlayer->dictionary);
+    vector< vector<KeyPoint> >  featureVec = myPlayer->frameFeatures->keypoints_frameVector;
+
+    for (int i = 0; i < featureVec.size(); i++)
+    {
+        cv::Mat frame = myPlayer->frameFeatures->frameVector.at(i);
+        bowDE.compute(frame, featureVec.at(i), histogram_sceneVector.at(i));
+    }
+}
 
 QString MainWindow::getFormattedTime(int timeInSeconds){
 
@@ -165,29 +185,23 @@ void MainWindow::Mouse_current_pos()
 
         if(mouse_pos.x() < ui->outLabel->width() && mouse_pos.y() < ui->outLabel->height() && mouse_pos.x() > 0 && mouse_pos.y() > 0 && prevPoint != QPoint(0,0))
         {   
-            px = px.scaled(ui->outLabel->size());
-            QPainter p(&px);
-            QPen pen(Qt::red);
-            pen.setWidth( 5 );
-            p.setPen(pen);
-            p.drawLine (mouse_pos.x(), mouse_pos.y(), prevPoint.x(), prevPoint.y());
-            p.end();
-            ui->outLabel->setPixmap(px);
-
-            if (mouse_pos.x() > 60)
-                topLeftCorner.setX(mouse_pos.x() - 60);
+            if (mouse_pos.x() > window.width)
+                topLeftCorner.setX(mouse_pos.x() - window.width);
             else
                 topLeftCorner.setX(0);
-            if (mouse_pos.y() > 60)
-                topLeftCorner.setY(mouse_pos.y() - 60);
+
+            if (mouse_pos.y() > window.height)
+                topLeftCorner.setY(mouse_pos.y() - window.height);
             else
                 topLeftCorner.setY(0);
-            if (mouse_pos.x() < (ui->outLabel->width() - 60))
-                bottomRightCorner.setX(mouse_pos.x() + 60);
+
+            if (mouse_pos.x() < (ui->outLabel->width() - window.width))
+                bottomRightCorner.setX(mouse_pos.x() + window.width);
             else
                 bottomRightCorner.setX(ui->outLabel->width());
-            if (mouse_pos.y() < (ui->outLabel->height() - 60) )
-                bottomRightCorner.setY(mouse_pos.y() + 60);
+
+            if (mouse_pos.y() < (ui->outLabel->height() - window.height) )
+                bottomRightCorner.setY(mouse_pos.y() + window.height);
             else
                 bottomRightCorner.setY(ui->outLabel->height());
         }
@@ -212,26 +226,45 @@ void MainWindow::Mouse_pressed()
 
 void MainWindow::Mouse_released()
 {
+
     /*
-    QPoint mouse_pos = ui->outLabel->mouseCurrentPos();
-    pxBuffer = pxBuffer.scaled(ui->outLabel->size());
+    //-- Step 3: Matching descriptor vectors using FLANN matcher
+    //matcher = DescriptorMatcher::create("FlannBased");
 
-    if (myPlayer->isStopped() && mouse_pos.x() < ui->outLabel->width() && mouse_pos.y() < ui->outLabel->height() && mouse_pos.x() > 0 && mouse_pos.y() > 0 && prevPoint != QPoint(0,0))
+      //Training the Bag of Words model with the selected feature components
+    vector<Mat> descriptors = bowTrainer->getDescriptors();
+
+    int count=0;
+    for(vector<Mat>::iterator iter=descriptors.begin();iter!=descriptors.end();iter++)
     {
-        roi = Rect(topLeftCorner.x(), topLeftCorner.y(), bottomRightCorner.x() - topLeftCorner.x(), bottomRightCorner.y() - topLeftCorner.y());
+        count+=iter->rows;
+    }
+    qDebug() << "Clustering " << count << " features" << endl;
 
-        cv::Mat frame = HelperFunctions::QPixmapToCvMat(pxBuffer);
-        cv::Mat mask = frame(roi);
+    if (count > MIN_FEATURE_SIZE && count > DICTIONARY_SIZE)
+    {
+        //choosing cluster's centroids as dictionary's words
+        Mat dictionary = bowTrainer->cluster();
 
-        processROI(mask);
+        BOWImgDescriptorExtractor bowDE(extractor, matcher);
+        bowDE.setVocabulary(dictionary);
+        qDebug() << "Processing training data..." << endl;
+        qDebug() << "extracting histograms in the form of BOW for each image "<<endl;
 
-        //cv::namedWindow("Selected Feature");
-        //cv::imshow("Selected Feature", mask);
+        Mat trainingData(0, DICTIONARY_SIZE, CV_32FC1);
+        Mat labels(0, 1, CV_32FC1);
 
-        myPlayer->Play();
-        prevPoint = QPoint(0,0);
-        topLeftCorner = QPoint(ui->outLabel->width() ,ui->outLabel->height());
-        bottomRightCorner = QPoint(0,0);
+        extractBOWDescriptor(trainingData, labels);
+
+        NormalBayesClassifier classifier;
+        qDebug() << "Training classifier..." << endl;
+
+        classifier.train(trainingData, labels);
+
+        qDebug() << "Processing evaluation data..." << endl;
+        Mat evalData(0, DICTIONARY_SIZE, CV_32FC1);
+        Mat groundTruth(0, 1, CV_32FC1);
+
     }
     */
 }
@@ -249,8 +282,9 @@ Mat MainWindow::connectedComponents(Mat roi)
     cvtColor(roiBuffer, roiBuffer, CV_BGR2GRAY);
 
     // Threshold and morphology operations
-    adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 3, 0);
+    adaptiveThreshold(roiBuffer, roiBuffer, 255, ADAPTIVE_THRESH_GAUSSIAN_C,  THRESH_BINARY, 5, 0);
     cv::medianBlur(roiBuffer,roiBuffer,3);
+    //equalizeHist(roiBuffer, roiBuffer);
     cv::erode(roiBuffer,roiBuffer,cv::Mat());
     cv::dilate(roiBuffer,roiBuffer,cv::Mat());
     GaussianBlur(roiBuffer, roiBuffer, Size(7,7), 1.5, 1.5);
@@ -258,17 +292,6 @@ Mat MainWindow::connectedComponents(Mat roi)
     cv::vector<cv::vector<cv::Point> > contours;
     findContours( roiBuffer, contours, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
     qDebug() << contours.size();
-
-    // Polygonal approximation
-    vector<vector<Point> > contours_poly( contours.size() );
-    vector<vector<Point> >hull( contours.size() );
-    vector<Rect> boundRect( contours.size() );
-    for( int i = 0; i < contours.size(); i++ )
-    {
-        approxPolyDP( Mat(contours[i]), contours_poly[i], 0.1*arcLength(contours[i],true), true );
-        convexHull( Mat(contours[i]), hull[i], false );
-        boundRect[i] = boundingRect( Mat(contours_poly[i]) );
-    }
 
     /// Find contour with largest area
     double maxArea = 0;
@@ -282,16 +305,28 @@ Mat MainWindow::connectedComponents(Mat roi)
             maxIdx = i;
         }
     }
-    qDebug() << maxArea;
-
     if (roiBuffer.size().area() == contourArea(contours[maxIdx]) )
         qDebug() << "Contour exceeds bounds!!!";
+    qDebug() << maxArea;
+
+    if (maxArea > COUNTOUR_AREA_THRESHOLD)
+    {
+        window.width *= 0.8;
+        window.height*= 0.8;
+    }
+    else
+    {
+        window.width *= 1.2;
+        window.height*= 1.2;
+    }
+
+    qDebug() << "window: " << window.width << " x " << window.height;
 
     Mat contourROI;
     Mat mask = Mat::zeros( roi.size(), roi.type());
     drawContours( mask, contours, maxIdx, Scalar(255,255,255), CV_FILLED, 8);
 
-    drawContours( roiBufferCopy, contours, maxIdx, Scalar(0,150,0), 2, 8);
+    drawContours( roiBufferCopy, contours, maxIdx, Scalar(0,150,0), 1.5 , 8);
     cv::Rect roi_temp(Point(topLeftCorner.x(), topLeftCorner.y()), roi.size());
 
     //Pixmap to Mat
@@ -302,64 +337,52 @@ Mat MainWindow::connectedComponents(Mat roi)
     ui->outLabel->setScaledContents(true);
     ui->outLabel->setAlignment(Qt::AlignCenter);
     px = px.scaled(ui->outLabel->size(), Qt::KeepAspectRatio, Qt::FastTransformation);
+
+    QPainter p(&px);
+    QPen pen(Qt::red);
+    pen.setWidth( 2 );
+    p.setPen(pen);
+    QPoint mouse_pos = ui->outLabel->mouseCurrentPos();
+    p.drawLine (mouse_pos.x(), mouse_pos.y(), prevPoint.x(), prevPoint.y());
+    p.end();
+
     ui->outLabel->setPixmap(px);
+
     bitwise_and(mask, roi, contourROI);
     return contourROI;
     ///-- find dominant object via contours and calculate surf feature points within the bounded region--//
 }
 
-void MainWindow::getCascade(Mat roi)
-{
-    equalizeHist(roi, roi);
-
-    CascadeClassifier cascade;
-    vector<Rect> objects;
-    vector<int> reject_levels;
-    vector<double> level_weights;
-    const float scale_factor(1.2f);
-    const int min_neighbors(3);
-    cascade.detectMultiScale(roi, objects, reject_levels, level_weights, scale_factor, min_neighbors, CV_HAAR_FIND_BIGGEST_OBJECT);
-    qDebug() << objects.size();
-    Mat image_roi = roi.clone();
-    for (int i = 0; i < objects.size(); i++)
-    {
-        rectangle( image_roi, objects[i], Scalar(255,0,0), 2, 8, 0);
-        putText(image_roi, std::to_string(level_weights[i]), Point(objects[i].x, objects[i].y), 1, 1, Scalar(0,0,255));
-        qDebug() << i;
-    }
-    if (objects.size() > 0)
-        imshow("cascade", image_roi );
-}
-
 void MainWindow::processROI(Mat roi)
 { 
-    HelperFunctions::cleanPreviousWindows();
-    //cvtColor(roi, roi, CV_BGR2GRAY);
     Mat contourROI = connectedComponents(roi);
-    Ptr<FeatureDetector> detector;
-    detector = new PyramidAdaptedFeatureDetector(new DynamicAdaptedFeatureDetector ( new FastAdjuster(40,true), 500, 1000, 3), 4);
-    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
 
-    vector<KeyPoint> keypoints_object;
-    Mat descriptors_object;
-    std::vector<cv::Mat> img_matchesVector;
+    if (isDictionarySet)
+    {
+        vector<KeyPoint> keypoints_object;
+        //Mat descriptors_object;
+        Mat histogram;
+        //std::vector<cv::Mat> img_matchesVector;
 
-    //-- Step 1: Detect the keypoints
-    detector->detect(contourROI, keypoints_object);
-    if (keypoints_object.size() < 4)
-        return;
+        //-- Step 1: Detect the keypoints
+        detector->detect(contourROI, keypoints_object);
 
-    //-- Step 2: Calculate descriptors (feature vectors)
-    extractor->compute( contourROI, keypoints_object, descriptors_object);
+        //-- Step 2: Calculate descriptors (feature vectors)
+        bowDE.compute(contourROI, keypoints_object, histogram);
 
-    //-- Step 3: Matching descriptor vectors using FLANN matcher
+        qDebug() << "histogram size: " << histogram.size().width << " x " << histogram.size().height;
+    }
+    /*
+    if (!descriptors_object.empty())
+    {
+        bowTrainer->add(descriptors_object);
+    }
+    */
+    /*
+
     vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
     vector<vector<DMatch> > matches;
-    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
 
-    //bowTrainer->add(descriptors_object);
-
-    /*
     for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
     {
         cv::Mat descriptors_scene = descriptors_sceneVector.at(i);
@@ -435,84 +458,6 @@ void MainWindow::processROI(Mat roi)
         }
     }
 */
-
 }
 
 
-void MainWindow::clustering()
-{
-    /************* TRAINING VOCABULARY **************/
-    //Training the Bag of Words model with the selected feature components
-
-    vector<cv::Mat> descriptors_sceneVector = myPlayer->frameFeatures->descriptors_sceneVector;
-    for (unsigned int i = 0; i < descriptors_sceneVector.size(); i++)
-    {
-        bowTrainer->add(descriptors_sceneVector.at(i));
-    }
-/*
-        int count=0;
-        for(vector<Mat>::iterator iter = descriptors_object.begin();iter!=descriptors_object.end();iter++)
-        {
-            count += iter->rows;
-        }
-        cout<<"Clustering "<<count<<" features"<<endl;
-
-        //Mat dictionary = bowTrainer.cluster();
-
-        //Create the Vocabulary with KMeans
-        Mat vocabulary = bowTrainer->cluster();
-        //qDebug() << vocabulary.size().height << " x " << vocabulary.size().width;
-
-        //Since we now have a Vocabulary, compute the occurence of delegate in object
-        BOWImgDescriptorExtractor bowDE( extractor, matcher);
-        //Set the vocabulary
-        bowDE.setVocabulary(vocabulary);
-        cout<<"Processing training data..."<<endl;
-
-        Mat trainingData(0, dictionarySize, CV_32FC1);
-        Mat labels(0, 1, CV_32FC1);
-        //extractBOWDescriptor(path(TRAINING_DATA_DIR), trainingData, labels);
-
-        NormalBayesClassifier classifier;
-            cout<<"Training classifier..."<<endl;
-
-}*/
-        /************* TRAINING VOCABULARY **************/
-}
-
-/*
-void extractBOWDescriptor(const path& basepath, Mat& descriptors, Mat& labels)
-{
-    for (directory_iterator iter = directory_iterator(basepath); iter
-            != directory_iterator(); iter++) {
-        directory_entry entry = *iter;
-        if (is_directory(entry.path())) {
-            cout << "Processing directory " << entry.path().string() << endl;
-            extractBOWDescriptor(entry.path(), descriptors, labels);
-        } else {
-            path entryPath = entry.path();
-            if (entryPath.extension() == ".jpg") {
-                cout << "Processing file " << entryPath.string() << endl;
-                Mat img = imread(entryPath.string());
-                if (!img.empty()) {
-                    vector<KeyPoint> keypoints;
-                    detector->detect(img, keypoints);
-                    if (keypoints.empty()) {
-                        cerr << "Warning: Could not find key points in image: "
-                                << entryPath.string() << endl;
-                    } else {
-                        Mat bowDescriptor;
-                        bowDE.compute(img, keypoints, bowDescriptor);
-                        descriptors.push_back(bowDescriptor);
-                        float label=atof(entryPath.filename().c_str());
-                        labels.push_back(label);
-                    }
-                } else {
-                    cerr << "Warning: Could not read image: "
-                            << entryPath.string() << endl;
-                }
-            }
-        }
-    }
-}
-*/

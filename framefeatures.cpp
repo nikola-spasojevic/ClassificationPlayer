@@ -9,6 +9,7 @@ FrameFeatures::FrameFeatures(QObject *parent) :
 void FrameFeatures::run()
 {
     found = false;
+    dictionaryCreated = false;
     processFrames();
 }
 
@@ -17,7 +18,7 @@ void FrameFeatures::processFrames()
     VideoCapture *capture  =  new cv::VideoCapture(filename);
     int numberOfFrames = capture->get(CV_CAP_PROP_FRAME_COUNT);
     int frameRate = (int) capture->get(CV_CAP_PROP_FPS);
-    int Nth = frameRate/2;
+    int Nth = frameRate;
     int j = 0;
     Mat frm;
     capture->read(frm); // get a new frame from camera
@@ -26,9 +27,8 @@ void FrameFeatures::processFrames()
 
     Mat descriptors_scene;
 
-    Ptr<FeatureDetector> detector;
-    detector =  new PyramidAdaptedFeatureDetector( new DynamicAdaptedFeatureDetector ( new FastAdjuster(40,true), 1000, 2000, 5), 4);
-    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
+    Ptr<FeatureDetector> detector =  new PyramidAdaptedFeatureDetector( new DynamicAdaptedFeatureDetector ( new FastAdjuster(50,true), 1000, 1500, 3), 4);
+    extractor = DescriptorExtractor::create("SURF");
 
     while( j < (numberOfFrames-Nth+1) && !frm.empty() )
     {
@@ -49,13 +49,20 @@ void FrameFeatures::processFrames()
         qDebug() << "Size of keypoints_scene bin = " << keypoints_scene.size();
         qDebug() << "Size of Scene Descriptor:  " << descriptors_sceneVector.size() << ": " << descriptors_scene.rows << " x " << descriptors_scene.cols;
 
-        //j += Nth;
-        //capture->set(CV_CAP_PROP_POS_FRAMES, j);
+        if (!descriptors_scene.empty())
+        {
+            bowTrainer->add(descriptors_scene);
+        }
+
+        j += Nth;
+        capture->set(CV_CAP_PROP_POS_FRAMES, j);
         capture->read(frm);// get every Nth frame (every second of video)
         found = true;
     }
 
+    calculateCluster();
     emit onFeaturesFound(found);
+    emit onDictionaryMade(dictionaryCreated);
 }
 
 void FrameFeatures::setFilename(string filename)
@@ -67,3 +74,27 @@ vector<cv::Mat > FrameFeatures::getFeatureVectors()
 {
     return this->descriptors_sceneVector;
 }
+
+void FrameFeatures::calculateCluster()
+{
+    /************* TRAINING VOCABULARY **************/
+    //Training the Bag of Words model with the selected feature components
+    vector<Mat> descriptors = bowTrainer->getDescriptors();
+
+    int count=0;
+    for(vector<Mat>::iterator iter=descriptors.begin();iter!=descriptors.end();iter++)
+    {
+        count+=iter->rows;
+    }
+    qDebug() << "Clustering " << count << " features" << endl;
+
+    if (count > DICTIONARY_SIZE)
+    {
+        dictionary = bowTrainer->cluster();
+        if (!dictionary.empty())
+        {
+            dictionaryCreated = true;
+        }
+    }
+}
+

@@ -1,6 +1,8 @@
 #ifndef FRAMEFEATURES_H
 #define FRAMEFEATURES_H
 
+#define DICTIONARY_SIZE 1500
+
 #include <QThread>
 #include <QtCore>
 #include <QDebug>
@@ -27,15 +29,22 @@ public:
     void processFrames();
     void setFilename(string filename);
     vector<cv::Mat > getFeatureVectors();
+    void calculateCluster();
 
+    Mat dictionary;
+    BOWKMeansTrainer* bowTrainer =  new BOWKMeansTrainer(DICTIONARY_SIZE, TermCriteria(CV_TERMCRIT_ITER, 10, 0.001), 1, KMEANS_PP_CENTERS); //Construct BOWKMeansTrainer
+    Ptr<DescriptorExtractor> extractor;
     vector<cv::Mat> frameVector;
     vector<vector<KeyPoint> > keypoints_frameVector;
+    vector<Mat> histogram_sceneVector;
     vector<cv::Mat > descriptors_sceneVector;
     string filename;
     bool found;    
+    bool dictionaryCreated;
 
 signals:
     void onFeaturesFound(const bool &found);
+    void onDictionaryMade(const bool &dictionary);
 
 public slots:
 

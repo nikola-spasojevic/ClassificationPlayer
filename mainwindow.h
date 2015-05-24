@@ -5,9 +5,11 @@
 #include <mousetracker.h>
 #include <helperfunctions.h>
 #include <QtGui>
+#include <opencv2/ml/ml.hpp>
 
-#define VOCABULARY_SIZE 3000
-
+#define DICTIONARY_SIZE 1000
+#define MIN_FEATURE_SIZE 7000
+#define COUNTOUR_AREA_THRESHOLD 3000
 
 namespace Ui {
 class MainWindow;
@@ -25,21 +27,22 @@ private:
     Ui::MainWindow *ui;
     Player* myPlayer;
 
-    vector< vector<KeyPoint> >  featureVec;
 
+    vector<Mat> histogram_sceneVector;
     QPoint prevPoint;
     QPoint topLeftCorner;
     QPoint bottomRightCorner;
     QPixmap px, pxBuffer;
-    Rect roi;
-
-    BOWKMeansTrainer* bowTrainer =  new BOWKMeansTrainer(VOCABULARY_SIZE, TermCriteria(CV_TERMCRIT_ITER, 10, 0.001), 1, KMEANS_PP_CENTERS); //number of clusters
+    cv::Rect roi;
+    cv::Rect window;
+    Ptr<FeatureDetector> detector = new PyramidAdaptedFeatureDetector(new DynamicAdaptedFeatureDetector (new FastAdjuster(100,true), 100, 200, 2), 4);
+    Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
+    Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
+    BOWImgDescriptorExtractor bowDE; 
+    bool isDictionarySet;
 
     void processROI(Mat roi);
     Mat connectedComponents(Mat roi);
-    void getCascade(Mat roi);
-    //void extractBOWDescriptor(Mat& descriptors, Mat& labels);
-    void clustering();
 
 signals:
 
@@ -47,6 +50,7 @@ private slots:
     /**************** FRAME PROCESSING ****************/
     void updatePlayerUI(QImage img);
     void processedPlayerUI(QImage processedImg);
+    void dictionaryReceived(bool voc);
     /**************** FRAME PROCESSING ****************/
 
     /**************** PLAYER ****************/

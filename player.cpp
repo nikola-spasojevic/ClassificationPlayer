@@ -9,6 +9,7 @@ Player::Player(QObject *parent)
     stop = true;
     frameFeatures = new FrameFeatures(this);
     QThread::connect(frameFeatures, SIGNAL(onFeaturesFound(bool)), this, SLOT(onFeaturesPassed(bool)));
+    QThread::connect(frameFeatures, SIGNAL(onDictionaryMade(bool)), this, SLOT(onDictionaryPassed(bool)));
 }
 
 Player::~Player()
@@ -132,8 +133,16 @@ void Player::onFeaturesPassed(bool found)
 {
     qDebug() << "features have been found: " << found;
     featureVectorPerFrame = frameFeatures->getFeatureVectors();
+
     if (found && HEAT_MAP   )
         getFeatureHeatMap();
+}
+
+void Player::onDictionaryPassed(bool voc)
+{
+    qDebug() << "dictionary has been created: " << voc;
+    this->dictionary = frameFeatures->dictionary;
+    emit dictionaryPassed(voc);
 }
 
 void Player::getFeatureHeatMap()
