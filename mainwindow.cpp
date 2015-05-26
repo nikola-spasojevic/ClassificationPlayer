@@ -84,13 +84,15 @@ void MainWindow::dictionaryReceived(bool voc)
     isDictionarySet = true;
     qDebug() << "is dictionary empty: " << myPlayer->dictionary.empty();
     bowDE.setVocabulary(myPlayer->dictionary);
-    vector< vector<KeyPoint> >  featureVec = myPlayer->frameFeatures->keypoints_frameVector;
+    vector< vector<KeyPoint> > featureVec = myPlayer->frameFeatures->keypoints_frameVector;
+    vector<Mat> histograms(featureVec.size());
 
     for (int i = 0; i < featureVec.size(); i++)
     {
         cv::Mat frame = myPlayer->frameFeatures->frameVector.at(i);
-        bowDE.compute(frame, featureVec.at(i), histogram_sceneVector.at(i));
+        bowDE.compute(frame, featureVec.at(i), histograms.at(i));
     }
+     histogram_sceneVector = histograms;
 }
 
 QString MainWindow::getFormattedTime(int timeInSeconds){
@@ -226,7 +228,6 @@ void MainWindow::Mouse_pressed()
 
 void MainWindow::Mouse_released()
 {
-
     /*
     //-- Step 3: Matching descriptor vectors using FLANN matcher
     //matcher = DescriptorMatcher::create("FlannBased");

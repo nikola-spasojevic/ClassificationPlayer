@@ -27,7 +27,7 @@ void FrameFeatures::processFrames()
 
     Mat descriptors_scene;
 
-    Ptr<FeatureDetector> detector =  new PyramidAdaptedFeatureDetector( new DynamicAdaptedFeatureDetector ( new FastAdjuster(50,true), 1000, 1500, 3), 4);
+    Ptr<FeatureDetector> detector =  new PyramidAdaptedFeatureDetector( new DynamicAdaptedFeatureDetector ( new SurfAdjuster(700,true), 1000, 1500, 3), 4);
     extractor = DescriptorExtractor::create("SURF");
 
     while( j < (numberOfFrames-Nth+1) && !frm.empty() )

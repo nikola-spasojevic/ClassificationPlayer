@@ -35,7 +35,7 @@ private:
     QPixmap px, pxBuffer;
     cv::Rect roi;
     cv::Rect window;
-    Ptr<FeatureDetector> detector = new PyramidAdaptedFeatureDetector(new DynamicAdaptedFeatureDetector (new FastAdjuster(100,true), 100, 200, 2), 4);
+    Ptr<FeatureDetector> detector = new PyramidAdaptedFeatureDetector(new DynamicAdaptedFeatureDetector (new SurfAdjuster(700,true), 100, 200, 2), 4);
     Ptr<DescriptorExtractor> extractor = DescriptorExtractor::create("SURF");
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("FlannBased");
     BOWImgDescriptorExtractor bowDE; 
